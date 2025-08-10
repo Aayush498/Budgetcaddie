@@ -41,7 +41,43 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgb(0 0 0 / 0.1);
         }
+
+        label,
+        button {
+            margin-top: 1em;
+            display: block;
+        }
+
+        #connectMessage,
+        #accessToken {
+            margin-top: 1em;
+            color: darkblue;
+            word-break: break-all;
+        }
+
+        #result {
+            margin-top: 1em;
+            color: green;
+        }
+
+        #error {
+            margin-top: 1em;
+            color: red;
+        }
+
+        input[type="text"] {
+            padding: 6px;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 5px;
+        }
+
+        #tokenInput {
+            margin-bottom: 10px;
+        }
     </style>
+    <!-- Plaid Link SDK -->
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 </head>
 
 <body>
@@ -60,7 +96,135 @@
             <p>This app helps you track and manage your budgets effectively. Use the links above to explore your
                 financial data.</p>
         </section>
+
+        <section style="margin-top: 40px;">
+            <h2>Connect Your Account</h2>
+            <button id="connectBtn">Connect</button>
+            <div id="connectMessage">Click "Connect" to link your bank account with Plaid.</div>
+
+            <label for="tokenInput">Your access token (auto-filled after success):</label>
+            <input type="text" id="tokenInput" placeholder="Access token appears here" disabled />
+
+            <button id="ingestBtn" disabled>Ingest</button>
+            <div id="result"></div>
+            <div id="error"></div>
+        </section>
     </main>
+
+    <script>
+        const API_BASE = "http://52.5.31.134:8080"; // Change this if needed
+
+        let receivedAccessToken = "";
+
+        document.getElementById("connectBtn").onclick = async function () {
+            document.getElementById("connectMessage").textContent = "Requesting Plaid link token...";
+            document.getElementById("error").textContent = "";
+            document.getElementById("result").textContent = "";
+            document.getElementById("tokenInput").value = "";
+            document.getElementById("ingestBtn").disabled = true;
+
+            try {
+                // 1. Get Plaid link token from backend
+                let res = await fetch(API_BASE + "/api/plaid/create_link_token");
+                let text = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    document.getElementById("connectMessage").textContent =
+                        "Error: Could not get link token. Server replied: " + text;
+                    return;
+                }
+                if (!data.link_token) {
+                    document.getElementById("connectMessage").textContent = "No link token received: " + text;
+                    return;
+                }
+
+                document.getElementById("connectMessage").textContent =
+                    "Opening Plaid Link. Complete the flow to connect your bank. (If window is blocked, allow popups!)";
+
+                // 2. Launch Plaid Link widget with returned link_token
+                let handler = Plaid.create({
+                    token: data.link_token,
+                    onSuccess: async function (public_token, metadata) {
+                        document.getElementById("connectMessage").textContent =
+                            "Plaid Link completed. Exchanging public token for access token...";
+                        // 3. Send public_token to backend for exchange
+                        try {
+                            let exchRes = await fetch(API_BASE + "/api/plaid/exchange_public_token", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ public_token })
+                            });
+                            let exchText = await exchRes.text();
+                            let exchData;
+                            try {
+                                exchData = JSON.parse(exchText);
+                            } catch (e) {
+                                document.getElementById("connectMessage").textContent =
+                                    "Exchange failed: Server error: " + exchText;
+                                return;
+                            }
+                            if (exchData.access_token) {
+                                receivedAccessToken = exchData.access_token;
+                                document.getElementById("tokenInput").value = receivedAccessToken;
+                                document.getElementById("tokenInput").disabled = false;
+                                document.getElementById("ingestBtn").disabled = false;
+                                document.getElementById("connectMessage").textContent =
+                                    "Bank linked & access token generated!";
+                            } else {
+                                document.getElementById("connectMessage").textContent =
+                                    "Failed to get access token. Server reply: " + exchText;
+                            }
+                        } catch (err) {
+                            document.getElementById("connectMessage").textContent =
+                                "Error exchanging token: " + err;
+                        }
+                    },
+                    onExit: function (err, metadata) {
+                        if (err) {
+                            document.getElementById("connectMessage").textContent =
+                                "Plaid Link exited: " + (err.display_message || err.error_message || "User exited.");
+                        } else {
+                            document.getElementById("connectMessage").textContent =
+                                "Plaid Link exited by user.";
+                        }
+                    },
+                });
+                handler.open();
+            } catch (err) {
+                document.getElementById("connectMessage").textContent =
+                    "Error: " + err;
+            }
+        };
+
+        document.getElementById("ingestBtn").onclick = async function () {
+            document.getElementById("result").textContent = "";
+            document.getElementById("error").textContent = "";
+
+            let accessToken = document.getElementById("tokenInput").value.trim();
+            if (!accessToken) {
+                document.getElementById("error").textContent = "No access token present!";
+                return;
+            }
+
+            try {
+                let res = await fetch(API_BASE + "/api/plaid/transactions/ingest", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ access_token: accessToken })
+                });
+                let text = await res.text();
+                if (res.ok) {
+                    document.getElementById("result").textContent = "Success: " + text;
+                } else {
+                    document.getElementById("error").textContent = "Error: " + text;
+                }
+            } catch (err) {
+                document.getElementById("error").textContent = "Error: " + err;
+            }
+        };
+    </script>
 </body>
 
 </html>
