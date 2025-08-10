@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+#powershell file
+set-env.ps1

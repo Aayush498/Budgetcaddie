@@ -41,13 +41,17 @@ public class PlaidController {
     @GetMapping("/create_link_token")
     public ResponseEntity<?> createLinkToken() {
         try {
+            // ✅ Generate a temporary unique user ID (for demo/testing without user linking)
+            // In the future, replace with your actual DB user ID
+            String uniqueUserId = java.util.UUID.randomUUID().toString();
+
             Map<String, Object> user = new HashMap<>();
-            user.put("client_user_id", "unique-user-id"); // Change accordingly
+            user.put("client_user_id", uniqueUserId);
 
             Map<String, Object> request = new HashMap<>();
             request.put("client_id", clientId);
             request.put("secret", secret);
-            request.put("client_name", "Your App Name");
+            request.put("client_name", "BudgetCaddie");
             request.put("language", "en");
             request.put("country_codes", new String[] { "US", "CA" });
             request.put("user", user);
@@ -105,6 +109,42 @@ public class PlaidController {
         }
     }
 
+    // @PostMapping("/transactions/get")
+    // public ResponseEntity<?> getTransactions(@RequestBody Map<String, String> body) {
+    //     String accessToken = body.get("access_token");
+
+    //     if (accessToken == null || accessToken.isEmpty()) {
+    //         return ResponseEntity.badRequest().body("access_token is required");
+    //     }
+
+    //     try {
+    //         Map<String, Object> request = new HashMap<>();
+    //         request.put("client_id", clientId);
+    //         request.put("secret", secret);
+    //         request.put("access_token", accessToken);
+
+    //         // Optional: specify date range
+    //         request.put("start_date", LocalDate.now().minusDays(30).toString());
+    //         request.put("end_date", LocalDate.now().toString());
+
+    //         String url = plaidBaseUrl + "/transactions/get";
+
+    //         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+    //         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+    //             return ResponseEntity.status(response.getStatusCode()).body("Failed to fetch transactions");
+    //         }
+
+    //         // Return raw JSON response or parse and map as needed
+    //         return ResponseEntity.ok(objectMapper.readTree(response.getBody()));
+
+    //     } catch (Exception e) {
+    //         e.printStackTrace();
+    //         return ResponseEntity.internalServerError().body("Error fetching transactions: " + e.getMessage());
+    //     }
+    // }
+
+    // /transactions/get
     @PostMapping("/transactions/get")
     public ResponseEntity<?> getTransactions(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
@@ -119,28 +159,77 @@ public class PlaidController {
             request.put("secret", secret);
             request.put("access_token", accessToken);
 
-            // Optional: specify date range
-            request.put("start_date", LocalDate.now().minusDays(30).toString());
+            // Changed to last 2 months
+            request.put("start_date", LocalDate.now().minusMonths(2).toString());
             request.put("end_date", LocalDate.now().toString());
 
             String url = plaidBaseUrl + "/transactions/get";
-
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 return ResponseEntity.status(response.getStatusCode()).body("Failed to fetch transactions");
             }
 
-            // Return raw JSON response or parse and map as needed
             return ResponseEntity.ok(objectMapper.readTree(response.getBody()));
-
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().body("Error fetching transactions: " + e.getMessage());
         }
     }
 
-    // Ingest Plaid transactions and save in DB
+    // // Ingest Plaid transactions and save in DB
+    // @PostMapping("/transactions/ingest")
+    // public ResponseEntity<?> ingestTransactions(@RequestBody Map<String, String> body) {
+    //     String accessToken = body.get("access_token");
+    //     if (accessToken == null || accessToken.isEmpty()) {
+    //         return ResponseEntity.badRequest().body("access_token is required");
+    //     }
+    //     try {
+    //         // Build Plaid API request
+    //         Map<String, Object> request = new HashMap<>();
+    //         request.put("client_id", clientId);
+    //         request.put("secret", secret);
+    //         request.put("access_token", accessToken);
+    //         request.put("start_date", LocalDate.now().minusDays(30).toString());
+    //         request.put("end_date", LocalDate.now().toString());
+
+    //         String url = plaidBaseUrl + "/transactions/get";
+    //         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+    //         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+    //             return ResponseEntity.status(response.getStatusCode()).body("Plaid fetch failed");
+    //         }
+
+    //         // Parse and save new transactions only
+    //         JsonNode root = objectMapper.readTree(response.getBody());
+    //         JsonNode txs = root.path("transactions");
+    //         int count = 0;
+    //         for (JsonNode t : txs) {
+    //             String plaidId = t.path("transaction_id").asText();
+    //             if (!transactionRepository.existsByPlaidTransactionId(plaidId)) {
+    //                 Transaction tx = new Transaction();
+    //                 tx.setPlaidTransactionId(plaidId);
+    //                 tx.setAccountId(t.path("account_id").asText());
+    //                 tx.setAmount(t.path("amount").asDouble());
+    //                 tx.setName(t.path("name").asText());
+    //                 JsonNode cat = t.path("personal_finance_category");
+    //                 tx.setCategory(cat.path("primary").asText(null));
+    //                 tx.setSubcategory(cat.path("detailed").asText(null));
+    //                 tx.setDate(LocalDate.parse(t.path("date").asText()));
+    //                 tx.setCurrencyCode(t.path("iso_currency_code").asText(null));
+    //                 tx.setMerchantName(t.path("merchant_name").asText(null));
+    //                 transactionRepository.save(tx);
+    //                 count++;
+    //             }
+    //         }
+    //         return ResponseEntity.ok("Stored " + count + " new transactions.");
+    //     } catch (Exception e) {
+    //         e.printStackTrace();
+    //         return ResponseEntity.internalServerError().body("Error ingesting transactions: " + e.getMessage());
+    //     }
+    // }
+
+    // /transactions/ingest
     @PostMapping("/transactions/ingest")
     public ResponseEntity<?> ingestTransactions(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
@@ -148,12 +237,13 @@ public class PlaidController {
             return ResponseEntity.badRequest().body("access_token is required");
         }
         try {
-            // Build Plaid API request
             Map<String, Object> request = new HashMap<>();
             request.put("client_id", clientId);
             request.put("secret", secret);
             request.put("access_token", accessToken);
-            request.put("start_date", LocalDate.now().minusDays(30).toString());
+
+            // Changed to last 2 months
+            request.put("start_date", LocalDate.now().minusMonths(2).toString());
             request.put("end_date", LocalDate.now().toString());
 
             String url = plaidBaseUrl + "/transactions/get";
@@ -163,7 +253,6 @@ public class PlaidController {
                 return ResponseEntity.status(response.getStatusCode()).body("Plaid fetch failed");
             }
 
-            // Parse and save new transactions only
             JsonNode root = objectMapper.readTree(response.getBody());
             JsonNode txs = root.path("transactions");
             int count = 0;
