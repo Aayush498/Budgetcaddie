@@ -2,231 +2,116 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BudgetCaddie</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background: #f7f9fc;
-            color: #333;
-        }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BudgetCaddie - Modern Personal Finance</title>
 
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 
-        h1 {
-            color: #2a9d8f;
-        }
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
 
-        nav a {
-            margin: 0 15px;
-            text-decoration: none;
-            color: #264653;
-            font-weight: bold;
-        }
-
-        nav a:hover {
-            color: #e76f51;
-        }
-
-        main {
-            max-width: 600px;
-            margin: auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgb(0 0 0 / 0.1);
-        }
-
-        label,
-        button {
-            margin-top: 1em;
-            display: block;
-        }
-
-        #connectMessage,
-        #accessToken {
-            margin-top: 1em;
-            color: darkblue;
-            word-break: break-all;
-        }
-
-        #result {
-            margin-top: 1em;
-            color: green;
-        }
-
-        #error {
-            margin-top: 1em;
-            color: red;
-        }
-
-        input[type="text"] {
-            padding: 6px;
-            width: 100%;
-            box-sizing: border-box;
-            margin-top: 5px;
-        }
-
-        #tokenInput {
-            margin-bottom: 10px;
-        }
-    </style>
     <!-- Plaid Link SDK -->
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js" defer></script>
 </head>
 
 <body>
-    <header>
-        <h1>Welcome to BudgetCaddie</h1>
-        <p>Your personal budgeting assistant.</p>
-    </header>
-    <main>
-        <nav>
-            <a href="/transactions">Transactions</a>
-            <a href="/accounts">Accounts</a>
-            <a href="/reports">Reports</a>
-        </nav>
-        <section>
-            <h2>Getting Started</h2>
-            <p>This app helps you track and manage your budgets effectively. Use the links above to explore your
-                financial data.</p>
-        </section>
 
-        <section style="margin-top: 40px;">
-            <h2>Connect Your Account</h2>
-            <button id="connectBtn">Connect</button>
-            <div id="connectMessage">Click "Connect" to link your bank account with Plaid.</div>
+    <!-- Main Container -->
+    <div class="main-container">
 
-            <label for="tokenInput">Your access token (auto-filled after success):</label>
-            <input type="text" id="tokenInput" placeholder="Access token appears here" disabled />
+        <!-- Animated Background -->
+        <div class="aurora-background"></div>
 
-            <button id="ingestBtn" disabled>Ingest</button>
-            <div id="result"></div>
-            <div id="error"></div>
-        </section>
-    </main>
+        <!-- Hero Section -->
+        <header id="hero-section" class="hero">
+            <div class="hero-content">
+                <h1 class="hero-title">BudgetCaddie</h1>
+                <p class="hero-subtitle">
+                    Your personal AI assistant to track, manage, and grow your finances effortlessly.
+                </p>
+                <div class="cta-buttons">
+                    <button class="btn btn-primary" onclick="openModal('register')">Get Started</button>
+                    <button class="btn btn-secondary" onclick="openModal('login')">Login</button>
+                </div>
+            </div>
+        </header>
 
-    <script>
-        // Change to your EC2 backend URL for production
-        const API_BASE = "http://localhost:8080";
+        <!-- App Section (Dashboard) -->
+        <main id="app-section" class="app-dashboard" style="display:none;">
+            <div class="dashboard-header">
+                <div>
+                    <h2 class="dashboard-title">Your Dashboard</h2>
+                    <p class="dashboard-subtitle">Manage accounts, track spending, and get detailed reports.</p>
+                </div>
+                <button onclick="handleLogout()" class="logout-btn">
+                    <span>Logout</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
 
-        let receivedAccessToken = "";
+            <div class="action-cards">
+                <button onclick="createLinkToken()" class="action-card">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path>
+                    </svg>
+                    <span>Connect Bank Account</span>
+                </button>
+                <button onclick="syncTransactions()" class="action-card">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 1-9 9H3.5a2.5 2.5 0 0 1 0-5H9a9 9 0 0 1 12 0Z"></path>
+                        <path d="M3 12a9 9 0 0 1 9-9h8.5a2.5 2.5 0 0 1 0 5H15a9 9 0 0 1-12 0Z"></path>
+                    </svg>
+                    <span>Sync Transactions</span>
+                </button>
+                <button onclick="getTransactions()" class="action-card">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20V10 -10"></path>
+                        <path d="M12 20l-4-4"></path>
+                        <path d="M12 20l4-4"></path>
+                        <path d="M4 4h16"></path>
+                    </svg>
+                    <span>View Transactions</span>
+                </button>
+            </div>
 
-        document.getElementById("connectBtn").onclick = async function () {
-            document.getElementById("connectMessage").textContent = "Requesting Plaid link token...";
-            document.getElementById("error").textContent = "";
-            document.getElementById("result").textContent = "";
-            document.getElementById("tokenInput").value = "";
-            document.getElementById("ingestBtn").disabled = true;
+            <p id="plaid-message" class="plaid-message"></p>
 
-            try {
-                // 1. Get Plaid link token from backend
-                let res = await fetch(API_BASE + "/api/plaid/create_link_token");
-                let text = await res.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    document.getElementById("connectMessage").textContent =
-                        "Error: Could not get link token. Server replied: " + text;
-                    return;
-                }
-                if (!data.link_token) {
-                    document.getElementById("connectMessage").textContent = "No link token received: " + text;
-                    return;
-                }
+            <div class="transactions-container">
+                <div class="transactions-header">Transaction Data</div>
+                <pre id="transactions-output">No transactions loaded yet. Click 'View Transactions' to fetch data.</pre>
+            </div>
+        </main>
+    </div>
 
-                document.getElementById("connectMessage").textContent =
-                    "Opening Plaid Link. Complete the flow to connect your bank. (If window is blocked, allow popups!)";
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+            <h2 id="auth-title" class="modal-title">Login</h2>
+            <div class="modal-body">
+                <input type="text" id="auth-username" placeholder="Username">
+                <input type="email" id="auth-email" placeholder="Email" style="display:none;">
+                <input type="password" id="auth-password" placeholder="Password">
+            </div>
+            <button id="auth-btn" class="btn btn-primary modal-btn" onclick="handleAuth()">Login</button>
+            <p id="auth-message" class="auth-message"></p>
+        </div>
+    </div>
 
-                // 2. Launch Plaid Link widget with returned link_token
-                let handler = Plaid.create({
-                    token: data.link_token,
-                    onSuccess: async function (public_token, metadata) {
-                        document.getElementById("connectMessage").textContent =
-                            "Plaid Link completed. Exchanging public token for access token...";
-                        // 3. Send public_token to backend for exchange
-                        try {
-                            let exchRes = await fetch(API_BASE + "/api/plaid/exchange_public_token", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ public_token })
-                            });
-                            let exchText = await exchRes.text();
-                            let exchData;
-                            try {
-                                exchData = JSON.parse(exchText);
-                            } catch (e) {
-                                document.getElementById("connectMessage").textContent =
-                                    "Exchange failed: Server error: " + exchText;
-                                return;
-                            }
-                            if (exchData.access_token) {
-                                receivedAccessToken = exchData.access_token;
-                                document.getElementById("tokenInput").value = receivedAccessToken;
-                                document.getElementById("tokenInput").disabled = false;
-                                document.getElementById("ingestBtn").disabled = false;
-                                document.getElementById("connectMessage").textContent =
-                                    "Bank linked & access token generated!";
-                            } else {
-                                document.getElementById("connectMessage").textContent =
-                                    "Failed to get access token. Server reply: " + exchText;
-                            }
-                        } catch (err) {
-                            document.getElementById("connectMessage").textContent =
-                                "Error exchanging token: " + err;
-                        }
-                    },
-                    onExit: function (err, metadata) {
-                        if (err) {
-                            document.getElementById("connectMessage").textContent =
-                                "Plaid Link exited: " + (err.display_message || err.error_message || "User exited.");
-                        } else {
-                            document.getElementById("connectMessage").textContent =
-                                "Plaid Link exited by user.";
-                        }
-                    },
-                });
-                handler.open();
-            } catch (err) {
-                document.getElementById("connectMessage").textContent =
-                    "Error: " + err;
-            }
-        };
-
-        // Updated ingestion to use /transactions/sync
-        document.getElementById("ingestBtn").onclick = async function () {
-            document.getElementById("result").textContent = "";
-            document.getElementById("error").textContent = "";
-
-            let accessToken = document.getElementById("tokenInput").value.trim();
-            if (!accessToken) {
-                document.getElementById("error").textContent = "No access token present!";
-                return;
-            }
-
-            try {
-                let res = await fetch(API_BASE + "/api/plaid/transactions/sync", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ access_token: accessToken })
-                });
-                let text = await res.text();
-                if (res.ok) {
-                    document.getElementById("result").textContent = "Success: " + text;
-                } else {
-                    document.getElementById("error").textContent = "Error: " + text;
-                }
-            } catch (err) {
-                document.getElementById("error").textContent = "Error: " + err;
-            }
-        };
-    </script>
+    <script src="app.js"></script>
 </body>
 
 </html>

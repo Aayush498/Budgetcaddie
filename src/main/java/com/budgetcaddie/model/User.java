@@ -68,4 +68,15 @@ public class User {
     public void setPassword(String password) {
         this.password = password;
     }
+
+    private String plaidAccessToken;
+
+    public String getPlaidAccessToken() {
+        return plaidAccessToken;
+    }
+
+    public void setPlaidAccessToken(String plaidAccessToken) {
+        this.plaidAccessToken = plaidAccessToken;
+    }
+
 }

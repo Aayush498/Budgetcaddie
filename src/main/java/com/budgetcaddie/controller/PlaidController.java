@@ -6,17 +6,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 
 import com.budgetcaddie.repository.TransactionRepository;
+import com.budgetcaddie.model.PlaidCursor;
 import com.budgetcaddie.model.Transaction;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+
+import com.budgetcaddie.model.User;
+import com.budgetcaddie.repository.UserRepository;
 
 @RestController
 @RequestMapping("/api/plaid")
@@ -47,6 +55,9 @@ public class PlaidController {
 
     @Autowired
     private com.budgetcaddie.repository.PlaidCursorRepository cursorRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     // Example endpoint to create a Link token
     @GetMapping("/create_link_token")
@@ -103,13 +114,11 @@ public class PlaidController {
         }
 
         try {
-            // Build request body for exchange
             Map<String, String> request = new HashMap<>();
             request.put("client_id", clientId);
             request.put("secret", secret);
             request.put("public_token", publicToken);
 
-            // Call Plaid exchange endpoint
             String url = plaidBaseUrl + "/item/public_token/exchange";
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
@@ -118,42 +127,54 @@ public class PlaidController {
                         .body("Failed to exchange public token");
             }
 
-            // Optional: parse response JSON to get access_token
             JsonNode json = objectMapper.readTree(response.getBody());
             String accessToken = json.path("access_token").asText();
 
-            // TODO: Save accessToken securely per user in your DB here
+            // 🔑 Get currently authenticated user
+            String username = SecurityContextHolder.getContext().getAuthentication().getName();
+            User user = userRepository.findByUsernameIgnoreCase(username)
+                    .orElseGet(() -> userRepository.findByEmailIgnoreCase(username).orElseThrow());
 
-            return ResponseEntity.ok(Map.of("access_token", accessToken));
+            // Store Plaid access token for this user
+            user.setPlaidAccessToken(accessToken);
+            userRepository.save(user);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Access token stored for user " + username,
+                    "access_token", accessToken));
         } catch (Exception ex) {
             ex.printStackTrace();
             return ResponseEntity.internalServerError().body("Error: " + ex.getMessage());
         }
     }
 
-    @PostMapping("/transactions/get")
-    public ResponseEntity<?> getAllTransactionsFromPlaid(@RequestBody Map<String, String> body) {
-        String accessToken = body.get("access_token");
-
-        if (accessToken == null || accessToken.isEmpty()) {
-            return ResponseEntity.badRequest().body("access_token is required");
-        }
-
+    @GetMapping("/transactions/get")
+    public ResponseEntity<?> getAllTransactionsFromPlaid() {
         try {
-            int pageSize = 500; // Plaid max per call
+            // 1️⃣ Get currently logged-in user from JWT
+            String username = SecurityContextHolder.getContext().getAuthentication().getName();
+            User user = userRepository.findByUsernameIgnoreCase(username)
+                    .orElseGet(() -> userRepository.findByEmailIgnoreCase(username)
+                            .orElseThrow(() -> new RuntimeException("User not found")));
+
+            String accessToken = user.getPlaidAccessToken();
+            if (accessToken == null || accessToken.isEmpty()) {
+                return ResponseEntity.badRequest().body("No Plaid access token linked for this user");
+            }
+
+            int pageSize = 500; // Plaid max transactions per call
             int offset = 0;
             int totalTransactions = -1;
 
-            // Store all fetched transactions here
-            java.util.List<JsonNode> allTransactions = new java.util.ArrayList<>();
+            // 💾 Store all fetched transactions here
+            List<JsonNode> allTransactions = new ArrayList<>();
 
+            // 2️⃣ Loop to fetch all pages from Plaid
             do {
                 Map<String, Object> request = new HashMap<>();
                 request.put("client_id", clientId);
                 request.put("secret", secret);
                 request.put("access_token", accessToken);
-
-                // Request maximum allowed history (Plaid will return what's available)
                 request.put("start_date", LocalDate.now().minusYears(2).toString());
                 request.put("end_date", LocalDate.now().toString());
 
@@ -182,6 +203,7 @@ public class PlaidController {
 
             } while (offset < totalTransactions);
 
+            // 3️⃣ Prepare result
             Map<String, Object> result = new HashMap<>();
             result.put("total_transactions", totalTransactions);
             result.put("transactions", allTransactions);
@@ -196,14 +218,20 @@ public class PlaidController {
     }
 
     @PostMapping("/transactions/sync")
-    public ResponseEntity<?> syncTransactions(@RequestBody Map<String, String> body) {
-        String accessToken = body.get("access_token");
-        if (accessToken == null || accessToken.isEmpty()) {
-            return ResponseEntity.badRequest().body("access_token is required");
-        }
-
+    public ResponseEntity<?> syncTransactions() {
         try {
-            // 1️⃣ Get stored cursor from DB (if exists)
+            // 1️⃣ Get logged-in username/email from JWT SecurityContext
+            String username = SecurityContextHolder.getContext().getAuthentication().getName();
+            User user = userRepository.findByUsernameIgnoreCase(username)
+                    .orElseGet(() -> userRepository.findByEmailIgnoreCase(username)
+                            .orElseThrow(() -> new RuntimeException("User not found: " + username)));
+
+            String accessToken = user.getPlaidAccessToken();
+            if (accessToken == null || accessToken.isEmpty()) {
+                return ResponseEntity.badRequest().body("No Plaid access token linked for this user");
+            }
+
+            // 2️⃣ Get stored cursor for this user's access token
             String cursor = cursorRepository.findByAccessToken(accessToken)
                     .map(c -> c.getCursor())
                     .orElse(null);
@@ -211,7 +239,7 @@ public class PlaidController {
             boolean hasMore = true;
             int countNew = 0;
 
-            // 2️⃣ Loop until Plaid says there’s no more data
+            // 3️⃣ Loop until no more transactions
             while (hasMore) {
                 Map<String, Object> req = new HashMap<>();
                 req.put("client_id", clientId);
@@ -231,7 +259,7 @@ public class PlaidController {
 
                 JsonNode root = objectMapper.readTree(response.getBody());
 
-                // 3️⃣ Process new transactions from "added"
+                // 4️⃣ Process all "added" transactions
                 JsonNode added = root.path("added");
                 for (JsonNode t : added) {
                     String plaidId = t.path("transaction_id").asText();
@@ -241,30 +269,37 @@ public class PlaidController {
                         tx.setAccountId(t.path("account_id").asText());
                         tx.setAmount(t.path("amount").asDouble());
                         tx.setName(t.path("name").asText());
+
                         JsonNode cat = t.path("personal_finance_category");
                         tx.setCategory(cat.path("primary").asText(null));
                         tx.setSubcategory(cat.path("detailed").asText(null));
+
                         tx.setDate(LocalDate.parse(t.path("date").asText()));
                         tx.setCurrencyCode(t.path("iso_currency_code").asText(null));
                         tx.setMerchantName(t.path("merchant_name").asText(null));
+
+                        tx.setUserId(user.getId()); // ✅ important!
+
                         transactionRepository.save(tx);
                         countNew++;
                     }
                 }
 
-                // 4️⃣ Update loop control values
+                // 5️⃣ Update loop conditions
                 hasMore = root.path("has_more").asBoolean();
                 cursor = root.path("next_cursor").asText();
 
-                // 5️⃣ Save the updated cursor in DB
-                com.budgetcaddie.model.PlaidCursor pc = cursorRepository.findByAccessToken(accessToken)
-                        .orElse(new com.budgetcaddie.model.PlaidCursor());
+                // 6️⃣ Save updated cursor for this access token
+                PlaidCursor pc = cursorRepository.findByAccessToken(accessToken)
+                        .orElse(new PlaidCursor());
                 pc.setAccessToken(accessToken);
                 pc.setCursor(cursor);
                 cursorRepository.save(pc);
             }
 
-            return ResponseEntity.ok("Synced and stored " + countNew + " new transactions.");
+            return ResponseEntity
+                    .ok("Synced and stored " + countNew + " new transactions for user " + user.getUsername());
+
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().body("Error syncing transactions: " + e.getMessage());

@@ -6,6 +6,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "transactions")
 public class Transaction {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -29,7 +30,11 @@ public class Transaction {
     private String currencyCode;
     private String merchantName;
 
-    // Getters and setters
+    // 🔹 Link transaction to a specific user
+    @Column(name = "user_id", nullable = true)
+    private Long userId;
+
+    // --- Getters and Setters ---
 
     public Long getId() {
         return id;
@@ -109,5 +114,13 @@ public class Transaction {
 
     public void setMerchantName(String merchantName) {
         this.merchantName = merchantName;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 }
