@@ -14,7 +14,6 @@ const authPassword = document.getElementById("auth-password");
 const heroSection = document.getElementById("hero-section");
 const appSection = document.getElementById("app-section");
 const plaidMessage = document.getElementById("plaid-message");
-const transactionsOutput = document.getElementById("transactions-output");
 
 // --- Modal Functions ---
 function openModal(mode) {
@@ -113,7 +112,9 @@ function handleLogout() {
     
     // Clear sensitive data from UI
     plaidMessage.innerText = "";
-    transactionsOutput.innerText = "No transactions loaded yet. Click 'View Transactions' to fetch data.";
+    document.getElementById('transactions-table-body').innerHTML = '';
+    document.getElementById('no-transactions-message').style.display = 'block';
+    document.getElementById('no-transactions-message').textContent = "No transactions loaded yet. Click 'View Transactions' to fetch data.";
 }
 
 // --- Plaid Integration ---
@@ -184,17 +185,63 @@ async function syncTransactions() {
 
 async function getTransactions() {
     plaidMessage.innerText = "📜 Fetching transactions...";
+    const tableBody = document.getElementById("transactions-table-body");
+    const noTransactionsMessage = document.getElementById("no-transactions-message");
+    tableBody.innerHTML = ''; // Clear previous results
+
     try {
         const res = await fetch(`${API_BASE}/plaid/transactions/get`, {
             headers: { Authorization: `Bearer ${JWT_TOKEN}` },
         });
         if (!res.ok) throw new Error(await res.text());
         const json = await res.json();
-        transactionsOutput.innerText = JSON.stringify(json, null, 2);
-        const count = json.length || json.total_transactions || 0;
-        plaidMessage.innerText = `📜 Fetched ${count} transactions.`;
+        
+        const transactions = Array.isArray(json) ? json : json.transactions || [];
+
+        if (transactions && transactions.length > 0) {
+            noTransactionsMessage.style.display = 'none';
+
+            transactions.forEach(transaction => {
+                const row = tableBody.insertRow();
+                
+                // Cell 1: Merchant Name (using snake_case from Plaid API)
+                const cellMerchant = row.insertCell();
+                cellMerchant.textContent = transaction.merchant_name || transaction.name || 'N/A';
+
+                // Cell 2: Amount
+                const cellAmount = row.insertCell();
+                const amount = transaction.amount;
+                cellAmount.textContent = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: transaction.iso_currency_code || 'USD',
+                }).format(amount);
+                cellAmount.style.color = amount > 0 ? 'var(--text-primary)' : 'var(--accent-success)';
+
+                // Cell 3: Category (looking inside personal_finance_category object)
+                const cellCategory = row.insertCell();
+                const pfc = transaction.personal_finance_category;
+                let categoryText = 'Uncategorized';
+                if (pfc && pfc.primary) {
+                    // Only show the primary category as requested
+                    categoryText = pfc.primary;
+                }
+                cellCategory.textContent = categoryText;
+
+                // Cell 4: Currency Code (using snake_case from Plaid API)
+                const cellCurrency = row.insertCell();
+                cellCurrency.textContent = transaction.iso_currency_code || 'N/A';
+            });
+
+            plaidMessage.innerText = `📜 Fetched ${transactions.length} transactions.`;
+        } else {
+            noTransactionsMessage.style.display = 'block';
+            noTransactionsMessage.textContent = "No transactions found. Try syncing first.";
+            plaidMessage.innerText = "📜 No transactions found.";
+        }
     } catch (error) {
-        transactionsOutput.innerText = `// Error fetching transactions: ${error.message}`;
+        tableBody.innerHTML = '';
+        noTransactionsMessage.style.display = 'block';
+        noTransactionsMessage.textContent = `Error fetching transactions: ${error.message}`;
         plaidMessage.innerText = `❌ Fetch error: ${error.message}`;
     }
 }

@@ -8,6 +8,7 @@
     --accent-primary: #22d3ee; /* cyan-400 */
     --accent-secondary: #ec4899; /* pink-500 */
     --accent-danger: #f43f5e; /* rose-500 */
+    --accent-success: #4ade80; /* green-400 */
     --font-family: 'Inter', sans-serif;
 }
 
@@ -220,36 +221,71 @@ body {
     color: var(--accent-primary);
 }
 
+/* --- Transactions Table --- */
 .transactions-container {
     margin-top: 1.5rem;
     background-color: rgba(30, 41, 59, 0.5);
     border: 1px solid var(--border-color);
     border-radius: 0.75rem;
+    overflow: hidden;
 }
 
 .transactions-header {
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
     font-weight: 500;
 }
 
-#transactions-output {
-    padding: 1rem;
-    font-family: monospace;
-    font-size: 0.875rem;
-    color: var(--text-primary);
-    max-height: 400px;
+.table-wrapper {
+    max-height: 450px;
     overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
 }
 
 /* Custom Scrollbar */
-#transactions-output::-webkit-scrollbar { width: 8px; }
-#transactions-output::-webkit-scrollbar-track { background: transparent; }
-#transactions-output::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
-#transactions-output::-webkit-scrollbar-thumb:hover { background: #718096; }
+.table-wrapper::-webkit-scrollbar { width: 8px; }
+.table-wrapper::-webkit-scrollbar-track { background: transparent; }
+.table-wrapper::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+.table-wrapper::-webkit-scrollbar-thumb:hover { background: #718096; }
+
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.transactions-table th, .transactions-table td {
+    padding: 1rem 1.25rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.transactions-table th {
+    background-color: rgba(51, 65, 85, 0.5);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.transactions-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.transactions-table tbody tr:hover {
+    background-color: rgba(51, 65, 85, 0.3);
+}
+
+.transactions-table td {
+    color: var(--text-primary);
+}
+
+.no-data-message {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+}
 
 /* --- Modal --- */
 .modal {

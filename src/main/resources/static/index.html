@@ -91,7 +91,23 @@
 
             <div class="transactions-container">
                 <div class="transactions-header">Transaction Data</div>
-                <pre id="transactions-output">No transactions loaded yet. Click 'View Transactions' to fetch data.</pre>
+                <div class="table-wrapper">
+                    <table class="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Merchant</th>
+                                <th>Amount</th>
+                                <th>Category</th>
+                                <th>Currency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-table-body">
+                            <!-- Transaction rows will be injected here by JavaScript -->
+                        </tbody>
+                    </table>
+                    <p id="no-transactions-message" class="no-data-message">No transactions loaded yet. Click 'View
+                        Transactions' to fetch data.</p>
+                </div>
             </div>
         </main>
     </div>
