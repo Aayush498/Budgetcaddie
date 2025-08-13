@@ -2,6 +2,9 @@ package com.budgetcaddie.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.annotation.PostConstruct;
+
 import com.budgetcaddie.repository.TransactionRepository;
 import com.budgetcaddie.model.Transaction;
 
@@ -25,8 +28,13 @@ public class PlaidController {
     @Value("${plaid.secret}")
     private String secret;
 
-    @Value("${plaid.env}")
+    @Value("${plaid.environment}")
     private String plaidBaseUrl;
+
+    @PostConstruct
+    public void init() {
+        System.out.println("✅ PLAID BASE URL LOADED: " + plaidBaseUrl);
+    }
 
     @Autowired
     private RestTemplate restTemplate;
@@ -36,6 +44,9 @@ public class PlaidController {
 
     @Autowired
     private TransactionRepository transactionRepository;
+
+    @Autowired
+    private com.budgetcaddie.repository.PlaidCursorRepository cursorRepository;
 
     // Example endpoint to create a Link token
     @GetMapping("/create_link_token")
@@ -56,6 +67,17 @@ public class PlaidController {
             request.put("country_codes", new String[] { "US", "CA" });
             request.put("user", user);
             request.put("products", new String[] { "transactions" });
+
+            // ✅ Allow manual account selection
+            // request.put("account_selection", true);
+
+            // ✅ Use your dashboard customization profile
+            request.put("link_customization_name", "default"); // or "canada"
+
+            // ✅ Request maximum transaction history (Plaid allows ~2 years, 730 days)
+            Map<String, Object> transactionsConfig = new HashMap<>();
+            transactionsConfig.put("days_requested", 730);
+            request.put("transactions", transactionsConfig);
 
             String url = plaidBaseUrl + "/link/token/create";
 
@@ -109,44 +131,8 @@ public class PlaidController {
         }
     }
 
-    // @PostMapping("/transactions/get")
-    // public ResponseEntity<?> getTransactions(@RequestBody Map<String, String> body) {
-    //     String accessToken = body.get("access_token");
-
-    //     if (accessToken == null || accessToken.isEmpty()) {
-    //         return ResponseEntity.badRequest().body("access_token is required");
-    //     }
-
-    //     try {
-    //         Map<String, Object> request = new HashMap<>();
-    //         request.put("client_id", clientId);
-    //         request.put("secret", secret);
-    //         request.put("access_token", accessToken);
-
-    //         // Optional: specify date range
-    //         request.put("start_date", LocalDate.now().minusDays(30).toString());
-    //         request.put("end_date", LocalDate.now().toString());
-
-    //         String url = plaidBaseUrl + "/transactions/get";
-
-    //         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-
-    //         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-    //             return ResponseEntity.status(response.getStatusCode()).body("Failed to fetch transactions");
-    //         }
-
-    //         // Return raw JSON response or parse and map as needed
-    //         return ResponseEntity.ok(objectMapper.readTree(response.getBody()));
-
-    //     } catch (Exception e) {
-    //         e.printStackTrace();
-    //         return ResponseEntity.internalServerError().body("Error fetching transactions: " + e.getMessage());
-    //     }
-    // }
-
-    // /transactions/get
     @PostMapping("/transactions/get")
-    public ResponseEntity<?> getTransactions(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> getAllTransactionsFromPlaid(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
 
         if (accessToken == null || accessToken.isEmpty()) {
@@ -154,130 +140,134 @@ public class PlaidController {
         }
 
         try {
-            Map<String, Object> request = new HashMap<>();
-            request.put("client_id", clientId);
-            request.put("secret", secret);
-            request.put("access_token", accessToken);
+            int pageSize = 500; // Plaid max per call
+            int offset = 0;
+            int totalTransactions = -1;
 
-            // Changed to last 2 months
-            request.put("start_date", LocalDate.now().minusMonths(2).toString());
-            request.put("end_date", LocalDate.now().toString());
+            // Store all fetched transactions here
+            java.util.List<JsonNode> allTransactions = new java.util.ArrayList<>();
 
-            String url = plaidBaseUrl + "/transactions/get";
-            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            do {
+                Map<String, Object> request = new HashMap<>();
+                request.put("client_id", clientId);
+                request.put("secret", secret);
+                request.put("access_token", accessToken);
 
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                return ResponseEntity.status(response.getStatusCode()).body("Failed to fetch transactions");
-            }
+                // Request maximum allowed history (Plaid will return what's available)
+                request.put("start_date", LocalDate.now().minusYears(2).toString());
+                request.put("end_date", LocalDate.now().toString());
 
-            return ResponseEntity.ok(objectMapper.readTree(response.getBody()));
+                Map<String, Object> options = new HashMap<>();
+                options.put("count", pageSize);
+                options.put("offset", offset);
+                request.put("options", options);
+
+                String url = plaidBaseUrl + "/transactions/get";
+                ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                    return ResponseEntity.status(response.getStatusCode())
+                            .body("Failed to fetch transactions from Plaid");
+                }
+
+                JsonNode root = objectMapper.readTree(response.getBody());
+                totalTransactions = root.path("total_transactions").asInt(0);
+
+                JsonNode txs = root.path("transactions");
+                for (JsonNode t : txs) {
+                    allTransactions.add(t);
+                }
+
+                offset += pageSize;
+
+            } while (offset < totalTransactions);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total_transactions", totalTransactions);
+            result.put("transactions", allTransactions);
+
+            return ResponseEntity.ok(result);
+
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError().body("Error fetching transactions: " + e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body("Error fetching transactions: " + e.getMessage());
         }
     }
 
-    // // Ingest Plaid transactions and save in DB
-    // @PostMapping("/transactions/ingest")
-    // public ResponseEntity<?> ingestTransactions(@RequestBody Map<String, String> body) {
-    //     String accessToken = body.get("access_token");
-    //     if (accessToken == null || accessToken.isEmpty()) {
-    //         return ResponseEntity.badRequest().body("access_token is required");
-    //     }
-    //     try {
-    //         // Build Plaid API request
-    //         Map<String, Object> request = new HashMap<>();
-    //         request.put("client_id", clientId);
-    //         request.put("secret", secret);
-    //         request.put("access_token", accessToken);
-    //         request.put("start_date", LocalDate.now().minusDays(30).toString());
-    //         request.put("end_date", LocalDate.now().toString());
-
-    //         String url = plaidBaseUrl + "/transactions/get";
-    //         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-
-    //         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-    //             return ResponseEntity.status(response.getStatusCode()).body("Plaid fetch failed");
-    //         }
-
-    //         // Parse and save new transactions only
-    //         JsonNode root = objectMapper.readTree(response.getBody());
-    //         JsonNode txs = root.path("transactions");
-    //         int count = 0;
-    //         for (JsonNode t : txs) {
-    //             String plaidId = t.path("transaction_id").asText();
-    //             if (!transactionRepository.existsByPlaidTransactionId(plaidId)) {
-    //                 Transaction tx = new Transaction();
-    //                 tx.setPlaidTransactionId(plaidId);
-    //                 tx.setAccountId(t.path("account_id").asText());
-    //                 tx.setAmount(t.path("amount").asDouble());
-    //                 tx.setName(t.path("name").asText());
-    //                 JsonNode cat = t.path("personal_finance_category");
-    //                 tx.setCategory(cat.path("primary").asText(null));
-    //                 tx.setSubcategory(cat.path("detailed").asText(null));
-    //                 tx.setDate(LocalDate.parse(t.path("date").asText()));
-    //                 tx.setCurrencyCode(t.path("iso_currency_code").asText(null));
-    //                 tx.setMerchantName(t.path("merchant_name").asText(null));
-    //                 transactionRepository.save(tx);
-    //                 count++;
-    //             }
-    //         }
-    //         return ResponseEntity.ok("Stored " + count + " new transactions.");
-    //     } catch (Exception e) {
-    //         e.printStackTrace();
-    //         return ResponseEntity.internalServerError().body("Error ingesting transactions: " + e.getMessage());
-    //     }
-    // }
-
-    // /transactions/ingest
-    @PostMapping("/transactions/ingest")
-    public ResponseEntity<?> ingestTransactions(@RequestBody Map<String, String> body) {
+    @PostMapping("/transactions/sync")
+    public ResponseEntity<?> syncTransactions(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
         if (accessToken == null || accessToken.isEmpty()) {
             return ResponseEntity.badRequest().body("access_token is required");
         }
+
         try {
-            Map<String, Object> request = new HashMap<>();
-            request.put("client_id", clientId);
-            request.put("secret", secret);
-            request.put("access_token", accessToken);
+            // 1️⃣ Get stored cursor from DB (if exists)
+            String cursor = cursorRepository.findByAccessToken(accessToken)
+                    .map(c -> c.getCursor())
+                    .orElse(null);
 
-            // Changed to last 2 months
-            request.put("start_date", LocalDate.now().minusMonths(2).toString());
-            request.put("end_date", LocalDate.now().toString());
+            boolean hasMore = true;
+            int countNew = 0;
 
-            String url = plaidBaseUrl + "/transactions/get";
-            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                return ResponseEntity.status(response.getStatusCode()).body("Plaid fetch failed");
-            }
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode txs = root.path("transactions");
-            int count = 0;
-            for (JsonNode t : txs) {
-                String plaidId = t.path("transaction_id").asText();
-                if (!transactionRepository.existsByPlaidTransactionId(plaidId)) {
-                    Transaction tx = new Transaction();
-                    tx.setPlaidTransactionId(plaidId);
-                    tx.setAccountId(t.path("account_id").asText());
-                    tx.setAmount(t.path("amount").asDouble());
-                    tx.setName(t.path("name").asText());
-                    JsonNode cat = t.path("personal_finance_category");
-                    tx.setCategory(cat.path("primary").asText(null));
-                    tx.setSubcategory(cat.path("detailed").asText(null));
-                    tx.setDate(LocalDate.parse(t.path("date").asText()));
-                    tx.setCurrencyCode(t.path("iso_currency_code").asText(null));
-                    tx.setMerchantName(t.path("merchant_name").asText(null));
-                    transactionRepository.save(tx);
-                    count++;
+            // 2️⃣ Loop until Plaid says there’s no more data
+            while (hasMore) {
+                Map<String, Object> req = new HashMap<>();
+                req.put("client_id", clientId);
+                req.put("secret", secret);
+                req.put("access_token", accessToken);
+                if (cursor != null) {
+                    req.put("cursor", cursor);
                 }
+
+                String url = plaidBaseUrl + "/transactions/sync";
+                ResponseEntity<String> response = restTemplate.postForEntity(url, req, String.class);
+
+                if (!response.getStatusCode().is2xxSuccessful()) {
+                    return ResponseEntity.status(response.getStatusCode())
+                            .body("Error from Plaid: " + response.getBody());
+                }
+
+                JsonNode root = objectMapper.readTree(response.getBody());
+
+                // 3️⃣ Process new transactions from "added"
+                JsonNode added = root.path("added");
+                for (JsonNode t : added) {
+                    String plaidId = t.path("transaction_id").asText();
+                    if (!transactionRepository.existsByPlaidTransactionId(plaidId)) {
+                        Transaction tx = new Transaction();
+                        tx.setPlaidTransactionId(plaidId);
+                        tx.setAccountId(t.path("account_id").asText());
+                        tx.setAmount(t.path("amount").asDouble());
+                        tx.setName(t.path("name").asText());
+                        JsonNode cat = t.path("personal_finance_category");
+                        tx.setCategory(cat.path("primary").asText(null));
+                        tx.setSubcategory(cat.path("detailed").asText(null));
+                        tx.setDate(LocalDate.parse(t.path("date").asText()));
+                        tx.setCurrencyCode(t.path("iso_currency_code").asText(null));
+                        tx.setMerchantName(t.path("merchant_name").asText(null));
+                        transactionRepository.save(tx);
+                        countNew++;
+                    }
+                }
+
+                // 4️⃣ Update loop control values
+                hasMore = root.path("has_more").asBoolean();
+                cursor = root.path("next_cursor").asText();
+
+                // 5️⃣ Save the updated cursor in DB
+                com.budgetcaddie.model.PlaidCursor pc = cursorRepository.findByAccessToken(accessToken)
+                        .orElse(new com.budgetcaddie.model.PlaidCursor());
+                pc.setAccessToken(accessToken);
+                pc.setCursor(cursor);
+                cursorRepository.save(pc);
             }
-            return ResponseEntity.ok("Stored " + count + " new transactions.");
+
+            return ResponseEntity.ok("Synced and stored " + countNew + " new transactions.");
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError().body("Error ingesting transactions: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Error syncing transactions: " + e.getMessage());
         }
     }
 
