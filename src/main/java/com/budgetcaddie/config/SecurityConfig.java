@@ -47,7 +47,7 @@ public class SecurityConfig {
 
         // Allow only your frontend URL here, e.g., for VS Code Live Server or localhost
         // with port 5500
-        configuration.setAllowedOriginPatterns(List.of("http://127.0.0.1:5500", "http://localhost:5500"));
+        configuration.setAllowedOriginPatterns(List.of("http://127.0.0.1:5500", "http://localhost:5500", "http://52.5.31.134:8080"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(List.of("*")); // Allow all headers
         configuration.setAllowCredentials(true); // Allow cookies/auth headers
