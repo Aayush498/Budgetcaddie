@@ -112,7 +112,8 @@
     </main>
 
     <script>
-        const API_BASE = "http://52.5.31.134:8080"; // Change this if needed
+        // Change to your EC2 backend URL for production
+        const API_BASE = "http://localhost:8080";
 
         let receivedAccessToken = "";
 
@@ -198,6 +199,7 @@
             }
         };
 
+        // Updated ingestion to use /transactions/sync
         document.getElementById("ingestBtn").onclick = async function () {
             document.getElementById("result").textContent = "";
             document.getElementById("error").textContent = "";
@@ -209,7 +211,7 @@
             }
 
             try {
-                let res = await fetch(API_BASE + "/api/plaid/transactions/ingest", {
+                let res = await fetch(API_BASE + "/api/plaid/transactions/sync", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ access_token: accessToken })
