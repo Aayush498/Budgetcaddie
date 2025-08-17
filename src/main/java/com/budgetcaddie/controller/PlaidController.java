@@ -69,7 +69,7 @@ public class PlaidController {
             request.put("products", new String[] { "transactions" });
 
             // ✅ Allow manual account selection
-            request.put("account_selection", true);
+            // request.put("account_selection", true);
 
             // ✅ Use your dashboard customization profile
             request.put("link_customization_name", "default"); // or "canada"
