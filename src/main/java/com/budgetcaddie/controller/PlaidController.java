@@ -48,12 +48,14 @@ public class PlaidController {
     @Autowired
     private com.budgetcaddie.repository.PlaidCursorRepository cursorRepository;
 
-    // Example endpoint to create a Link token
+    // =========================
+    // LINK TOKEN CREATION
+    // =========================
     @GetMapping("/create_link_token")
     public ResponseEntity<?> createLinkToken() {
         try {
-            // ✅ Generate a temporary unique user ID (for demo/testing without user linking)
-            // In the future, replace with your actual DB user ID
+            // ⚠️ Checklist: Use a FRESH link_token after any Dashboard change
+            // This code already generates a new token per request (no caching).
             String uniqueUserId = java.util.UUID.randomUUID().toString();
 
             Map<String, Object> user = new HashMap<>();
@@ -66,21 +68,51 @@ public class PlaidController {
             request.put("language", "en");
             request.put("country_codes", new String[] { "US", "CA" });
             request.put("user", user);
+
+            // 💡 Transactions covers depository + credit (credit cards). Keep only "transactions" here.
             request.put("products", new String[] { "transactions" });
 
-            // ✅ Allow manual account selection
-            // request.put("account_selection", true);
+            // ✅ Ensure your intended customization is applied to THIS token
+            // (You said "canada" has Multiple Account Selection enabled.)
+            request.put("link_customization_name", "canada");
 
-            // ✅ Use your dashboard customization profile
-            request.put("link_customization_name", "default"); // or "canada"
-
-            // ✅ Request maximum transaction history (Plaid allows ~2 years, 730 days)
+            // Ask for max history Plaid will allow (up to ~24 months depending on FI)
             Map<String, Object> transactionsConfig = new HashMap<>();
             transactionsConfig.put("days_requested", 730);
             request.put("transactions", transactionsConfig);
 
-            String url = plaidBaseUrl + "/link/token/create";
+            // ===========================================================
+            // 🔽🔽 UNCOMMENT TO ENABLE ACCOUNT FILTERS (Checklist #3/#6) 🔽🔽
+            // // Limit Link UI to only show Checking, Savings, and Credit Card
+            // Map<String, Object> accountFilters = new HashMap<>();
+            //
+            // Map<String, Object> depository = new HashMap<>();
+            // depository.put("account_subtypes", new String[] { "checking", "savings" });
+            // accountFilters.put("depository", depository);
+            //
+            // Map<String, Object> credit = new HashMap<>();
+            // credit.put("account_subtypes", new String[] { "credit card" });
+            // accountFilters.put("credit", credit);
+            //
+            // request.put("account_filters", accountFilters);
+            // ===========================================================
 
+            // ===========================================================
+            // 🔽🔽 OPTIONAL: Desktop/Web OAuth redirect (Checklist #4) 🔽🔽
+            // // If you test OAuth institutions (e.g., app-to-app/web) on desktop:
+            // request.put("redirect_uri", "https://yourapp.example/plaid/oauth-return");
+            // // Make sure the same exact URI is whitelisted in Plaid Dashboard
+            // ===========================================================
+
+            // (Optional) Link UI hint—Link already handles selection, but you can set this
+            // request.put("account_selection", true);
+
+            // DEBUG: log the outgoing payload so you can confirm customization + filters
+            try {
+                System.out.println("📝 /link/token/create payload => " + objectMapper.writeValueAsString(request));
+            } catch (Exception ignore) {}
+
+            String url = plaidBaseUrl + "/link/token/create";
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -95,6 +127,9 @@ public class PlaidController {
         }
     }
 
+    // =========================
+    // PUBLIC TOKEN EXCHANGE
+    // =========================
     @PostMapping("/exchange_public_token")
     public ResponseEntity<?> exchangePublicToken(@RequestBody Map<String, String> body) {
         String publicToken = body.get("public_token");
@@ -103,13 +138,11 @@ public class PlaidController {
         }
 
         try {
-            // Build request body for exchange
             Map<String, String> request = new HashMap<>();
             request.put("client_id", clientId);
             request.put("secret", secret);
             request.put("public_token", publicToken);
 
-            // Call Plaid exchange endpoint
             String url = plaidBaseUrl + "/item/public_token/exchange";
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
@@ -118,11 +151,10 @@ public class PlaidController {
                         .body("Failed to exchange public token");
             }
 
-            // Optional: parse response JSON to get access_token
             JsonNode json = objectMapper.readTree(response.getBody());
             String accessToken = json.path("access_token").asText();
 
-            // TODO: Save accessToken securely per user in your DB here
+            // TODO: Persist accessToken per user (securely)
 
             return ResponseEntity.ok(Map.of("access_token", accessToken));
         } catch (Exception ex) {
@@ -131,6 +163,9 @@ public class PlaidController {
         }
     }
 
+    // =========================
+    // FULL TRANSACTION BACKFILL (PAGINATED)
+    // =========================
     @PostMapping("/transactions/get")
     public ResponseEntity<?> getAllTransactionsFromPlaid(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
@@ -144,7 +179,6 @@ public class PlaidController {
             int offset = 0;
             int totalTransactions = -1;
 
-            // Store all fetched transactions here
             java.util.List<JsonNode> allTransactions = new java.util.ArrayList<>();
 
             do {
@@ -153,7 +187,6 @@ public class PlaidController {
                 request.put("secret", secret);
                 request.put("access_token", accessToken);
 
-                // Request maximum allowed history (Plaid will return what's available)
                 request.put("start_date", LocalDate.now().minusYears(2).toString());
                 request.put("end_date", LocalDate.now().toString());
 
@@ -195,6 +228,9 @@ public class PlaidController {
         }
     }
 
+    // =========================
+    // INCREMENTAL SYNC (CURSOR)
+    // =========================
     @PostMapping("/transactions/sync")
     public ResponseEntity<?> syncTransactions(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
@@ -203,7 +239,6 @@ public class PlaidController {
         }
 
         try {
-            // 1️⃣ Get stored cursor from DB (if exists)
             String cursor = cursorRepository.findByAccessToken(accessToken)
                     .map(c -> c.getCursor())
                     .orElse(null);
@@ -211,15 +246,12 @@ public class PlaidController {
             boolean hasMore = true;
             int countNew = 0;
 
-            // 2️⃣ Loop until Plaid says there’s no more data
             while (hasMore) {
                 Map<String, Object> req = new HashMap<>();
                 req.put("client_id", clientId);
                 req.put("secret", secret);
                 req.put("access_token", accessToken);
-                if (cursor != null) {
-                    req.put("cursor", cursor);
-                }
+                if (cursor != null) req.put("cursor", cursor);
 
                 String url = plaidBaseUrl + "/transactions/sync";
                 ResponseEntity<String> response = restTemplate.postForEntity(url, req, String.class);
@@ -231,7 +263,6 @@ public class PlaidController {
 
                 JsonNode root = objectMapper.readTree(response.getBody());
 
-                // 3️⃣ Process new transactions from "added"
                 JsonNode added = root.path("added");
                 for (JsonNode t : added) {
                     String plaidId = t.path("transaction_id").asText();
@@ -252,11 +283,9 @@ public class PlaidController {
                     }
                 }
 
-                // 4️⃣ Update loop control values
                 hasMore = root.path("has_more").asBoolean();
                 cursor = root.path("next_cursor").asText();
 
-                // 5️⃣ Save the updated cursor in DB
                 com.budgetcaddie.model.PlaidCursor pc = cursorRepository.findByAccessToken(accessToken)
                         .orElse(new com.budgetcaddie.model.PlaidCursor());
                 pc.setAccessToken(accessToken);
