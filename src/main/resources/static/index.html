@@ -7,10 +7,10 @@
     <title>BudgetCaddie</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 40px;
-            background: #f7f9fc;
-            color: #333;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #222;
         }
 
         header {
@@ -20,13 +20,30 @@
 
         h1 {
             color: #2a9d8f;
+            font-weight: 700;
+            font-size: 2.8rem;
+            letter-spacing: 1.5px;
+            margin-bottom: 5px;
+        }
+
+        p.subheader {
+            color: #264653;
+            font-weight: 500;
+            font-size: 1.2rem;
+            margin-top: 0;
+        }
+
+        nav {
+            text-align: center;
+            margin-bottom: 40px;
         }
 
         nav a {
-            margin: 0 15px;
+            margin: 0 20px;
             text-decoration: none;
             color: #264653;
-            font-weight: bold;
+            font-weight: 600;
+            transition: color 0.3s ease;
         }
 
         nav a:hover {
@@ -37,53 +54,127 @@
             max-width: 600px;
             margin: auto;
             background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgb(0 0 0 / 0.1);
+            padding: 40px 50px;
+            border-radius: 16px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
         }
 
-        label,
-        button {
-            margin-top: 1em;
+        section h2 {
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: #264653;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: 600;
+            margin-top: 30px;
             display: block;
-        }
-
-        #connectMessage,
-        #accessToken {
-            margin-top: 1em;
-            color: darkblue;
-            word-break: break-all;
-        }
-
-        #result {
-            margin-top: 1em;
-            color: green;
-        }
-
-        #error {
-            margin-top: 1em;
-            color: red;
+            color: #264653;
+            font-size: 1rem;
         }
 
         input[type="text"] {
-            padding: 6px;
+            padding: 12px 16px;
             width: 100%;
             box-sizing: border-box;
-            margin-top: 5px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            font-size: 1rem;
+            margin-top: 8px;
+            transition: border-color 0.3s ease;
         }
 
-        #tokenInput {
-            margin-bottom: 10px;
+        input[type="text"]:disabled {
+            background: #f0f0f0;
+            border-color: #ccc;
+            color: #888;
+        }
+
+        #connectBtn {
+            background: #2a9d8f;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 20px;
+            display: block;
+            width: 100%;
+        }
+
+        #connectBtn:hover {
+            background: #264653;
+        }
+
+        #connectMessage,
+        #result,
+        #error {
+            margin-top: 25px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+
+        #connectMessage {
+            color: #2a9d8f;
+            min-height: 48px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #result {
+            color: #2a9d8f;
+        }
+
+        #error {
+            color: #e63946;
+        }
+
+        /* Spinner */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2a9d8f;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Fade-in animation for messages */
+        .fade-in {
+            animation: fadeInText 1.2s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeInText {
+            to {
+                opacity: 1;
+            }
         }
     </style>
-    <!-- Plaid Link SDK -->
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 </head>
 
 <body>
     <header>
         <h1>Welcome to BudgetCaddie</h1>
-        <p>Your personal budgeting assistant.</p>
+        <p class="subheader">Your personal budgeting assistant.</p>
     </header>
     <main>
         <nav>
@@ -92,124 +183,24 @@
             <a href="/reports">Reports</a>
         </nav>
         <section>
-            <h2>Getting Started</h2>
-            <p>This app helps you track and manage your budgets effectively. Use the links above to explore your
-                financial data.</p>
-        </section>
-
-        <section style="margin-top: 40px;">
             <h2>Connect Your Account</h2>
-            <button id="connectBtn">Connect</button>
-            <div id="connectMessage">Click "Connect" to link your bank account with Plaid.</div>
-
-            <label for="tokenInput">Your access token (auto-filled after success):</label>
+            <button id="connectBtn">Connect Your Bank</button>
+            <div id="connectMessage" aria-live="polite" role="status">
+                Click "Connect Your Bank" to link your bank account with Plaid.
+            </div>
+            <label for="tokenInput">Your Access Token (auto-filled after success)</label>
             <input type="text" id="tokenInput" placeholder="Access token appears here" disabled />
-
-            <button id="ingestBtn" disabled>Ingest</button>
-            <div id="result"></div>
-            <div id="error"></div>
+            <div id="result" class="fade-in"></div>
+            <div id="error" class="fade-in" role="alert"></div>
         </section>
     </main>
-
     <script>
-        // Change to your EC2 backend URL for production
-        const API_BASE = "http://52.5.31.134:8080";
-
+        // const API_BASE = "http://localhost:8080"; // Local backend URL
+        const API_BASE = "http://52.5.31.134:8080"; // Production backend URL
         let receivedAccessToken = "";
+        let syncInterval = null;
 
-        document.getElementById("connectBtn").onclick = async function () {
-            document.getElementById("connectMessage").textContent = "Requesting Plaid link token...";
-            document.getElementById("error").textContent = "";
-            document.getElementById("result").textContent = "";
-            document.getElementById("tokenInput").value = "";
-            document.getElementById("ingestBtn").disabled = true;
-
-            try {
-                // 1. Get Plaid link token from backend
-                let res = await fetch(API_BASE + "/api/plaid/create_link_token");
-                let text = await res.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    document.getElementById("connectMessage").textContent =
-                        "Error: Could not get link token. Server replied: " + text;
-                    return;
-                }
-                if (!data.link_token) {
-                    document.getElementById("connectMessage").textContent = "No link token received: " + text;
-                    return;
-                }
-
-                document.getElementById("connectMessage").textContent =
-                    "Opening Plaid Link. Complete the flow to connect your bank. (If window is blocked, allow popups!)";
-
-                // 2. Launch Plaid Link widget with returned link_token
-                let handler = Plaid.create({
-                    token: data.link_token,
-                    onSuccess: async function (public_token, metadata) {
-                        document.getElementById("connectMessage").textContent =
-                            "Plaid Link completed. Exchanging public token for access token...";
-                        // 3. Send public_token to backend for exchange
-                        try {
-                            let exchRes = await fetch(API_BASE + "/api/plaid/exchange_public_token", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ public_token })
-                            });
-                            let exchText = await exchRes.text();
-                            let exchData;
-                            try {
-                                exchData = JSON.parse(exchText);
-                            } catch (e) {
-                                document.getElementById("connectMessage").textContent =
-                                    "Exchange failed: Server error: " + exchText;
-                                return;
-                            }
-                            if (exchData.access_token) {
-                                receivedAccessToken = exchData.access_token;
-                                document.getElementById("tokenInput").value = receivedAccessToken;
-                                document.getElementById("tokenInput").disabled = false;
-                                document.getElementById("ingestBtn").disabled = false;
-                                document.getElementById("connectMessage").textContent =
-                                    "Bank linked & access token generated!";
-                            } else {
-                                document.getElementById("connectMessage").textContent =
-                                    "Failed to get access token. Server reply: " + exchText;
-                            }
-                        } catch (err) {
-                            document.getElementById("connectMessage").textContent =
-                                "Error exchanging token: " + err;
-                        }
-                    },
-                    onExit: function (err, metadata) {
-                        if (err) {
-                            document.getElementById("connectMessage").textContent =
-                                "Plaid Link exited: " + (err.display_message || err.error_message || "User exited.");
-                        } else {
-                            document.getElementById("connectMessage").textContent =
-                                "Plaid Link exited by user.";
-                        }
-                    },
-                });
-                handler.open();
-            } catch (err) {
-                document.getElementById("connectMessage").textContent =
-                    "Error: " + err;
-            }
-        };
-
-        // Updated ingestion to use /transactions/sync
-        document.getElementById("ingestBtn").onclick = async function () {
-            document.getElementById("result").textContent = "";
-            document.getElementById("error").textContent = "";
-
-            let accessToken = document.getElementById("tokenInput").value.trim();
-            if (!accessToken) {
-                document.getElementById("error").textContent = "No access token present!";
-                return;
-            }
-
+        async function syncTransactions(accessToken) {
             try {
                 let res = await fetch(API_BASE + "/api/plaid/transactions/sync", {
                     method: "POST",
@@ -218,14 +209,105 @@
                 });
                 let text = await res.text();
                 if (res.ok) {
-                    document.getElementById("result").textContent = "Success: " + text;
+                    // Show friendly limited message with spinner
+                    document.getElementById('connectMessage').innerHTML =
+                        `<div class="spinner"></div> Fetching transactions... ${text.length > 50 ? text.slice(0, 50) + "..." : text}`;
+                    return true;
                 } else {
-                    document.getElementById("error").textContent = "Error: " + text;
+                    document.getElementById('error').textContent = "Sync Error: " + text;
+                    return false;
                 }
             } catch (err) {
-                document.getElementById("error").textContent = "Error: " + err;
+                document.getElementById('error').textContent = "Sync Error: " + err;
+                return false;
             }
-        };
+        }
+
+        document.getElementById("connectBtn").onclick = async function () {
+                document.getElementById('error').textContent = '';
+                document.getElementById('result').textContent = '';
+                document.getElementById("connectMessage").innerHTML = `Requesting Plaid link token... <div class="spinner"></div>`;
+                document.getElementById("tokenInput").value = "";
+
+                try {
+                    let res = await fetch(API_BASE + "/api/plaid/create_link_token");
+                    let text = await res.text();
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        document.getElementById("connectMessage").textContent = "Error: Could not get link token. Server replied: " + text;
+                        return;
+                    }
+                    if (!data.link_token) {
+                        document.getElementById("connectMessage").textContent = "No link token received: " + text;
+                        return;
+                    }
+
+                    document.getElementById("connectMessage").textContent = "Opening Plaid Link. Complete the flow to connect your bank. (If window is blocked, allow popups!)";
+
+                    let handler = Plaid.create({
+                        token: data.link_token,
+                        onSuccess: async function (public_token, metadata) {
+                            document.getElementById("connectMessage").innerHTML = 'Exchanging public token for access token... <div class="spinner"></div>';
+                            try {
+                                let exchRes = await fetch(API_BASE + "/api/plaid/exchange_public_token", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ public_token })
+                                });
+                                let exchText = await exchRes.text();
+                                let exchData;
+                                try {
+                                    exchData = JSON.parse(exchText);
+                                } catch (e) {
+                                    document.getElementById("connectMessage").textContent = "Exchange failed: Server error: " + exchText;
+                                    return;
+                                }
+                                if (exchData.access_token) {
+                                    receivedAccessToken = exchData.access_token;
+                                    document.getElementById("tokenInput").value = receivedAccessToken;
+                                    document.getElementById("tokenInput").disabled = false;
+                                    document.getElementById("connectMessage").innerHTML = 'Bank linked! Starting automatic transaction syncing... <div class="spinner"></div>';
+
+                                    if (syncInterval) clearInterval(syncInterval);
+
+                                    let count = 0;
+                                    const maxCount = 30; // max 30 times (30 minutes)
+                                    syncInterval = setInterval(async () => {
+                                        const success = await syncTransactions(receivedAccessToken);
+                                        count++;
+                                        if (!success) {
+                                            clearInterval(syncInterval);
+                                            document.getElementById("connectMessage").textContent = "Sync failed or stopped.";
+                                        } else if (count >= maxCount) {
+                                            clearInterval(syncInterval);
+                                            document.getElementById("connectMessage").textContent = "Auto-sync completed after 30 minutes.";
+                                        } else {
+                                            document.getElementById("connectMessage").innerHTML = `Auto-sync #${count} completed. Next sync in 1 minute... <div class="spinner"></div>`;
+                                        }
+                                    }, 60000); // 1 minute interval
+                                } else {
+                                    document.getElementById("connectMessage").textContent = "Failed to get access token. Server reply: " + exchText;
+                                }
+                            } catch (err) {
+                                document.getElementById("connectMessage").textContent = "Error exchanging token: " + err;
+                            }
+                        },
+                        onExit: function (err, metadata) {
+                            if (err) {
+                                document.getElementById("connectMessage").textContent = "Plaid Link exited: " + (err.display_message || err.error_message || "User exited.");
+                            } else {
+                                document.getElementById("connectMessage").textContent = "Plaid Link exited by user.";
+                            }
+                        }
+                    });
+                    handler.open();
+                } catch (err) {
+                    document.getElementById("connectMessage").textContent = "Error: " + err;
+                }
+            };
+
     </script>
 </body>
 
