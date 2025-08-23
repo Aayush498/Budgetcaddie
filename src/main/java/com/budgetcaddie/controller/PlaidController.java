@@ -74,38 +74,12 @@ public class PlaidController {
 
             // ✅ Ensure your intended customization is applied to THIS token
             // (You said "canada" has Multiple Account Selection enabled.)
-            request.put("link_customization_name", "canada");
+            // request.put("link_customization_name", "canada");
 
             // Ask for max history Plaid will allow (up to ~24 months depending on FI)
             Map<String, Object> transactionsConfig = new HashMap<>();
             transactionsConfig.put("days_requested", 730);
             request.put("transactions", transactionsConfig);
-
-            // ===========================================================
-            // 🔽🔽 UNCOMMENT TO ENABLE ACCOUNT FILTERS (Checklist #3/#6) 🔽🔽
-            // // Limit Link UI to only show Checking, Savings, and Credit Card
-            // Map<String, Object> accountFilters = new HashMap<>();
-            //
-            // Map<String, Object> depository = new HashMap<>();
-            // depository.put("account_subtypes", new String[] { "checking", "savings" });
-            // accountFilters.put("depository", depository);
-            //
-            // Map<String, Object> credit = new HashMap<>();
-            // credit.put("account_subtypes", new String[] { "credit card" });
-            // accountFilters.put("credit", credit);
-            //
-            // request.put("account_filters", accountFilters);
-            // ===========================================================
-
-            // ===========================================================
-            // 🔽🔽 OPTIONAL: Desktop/Web OAuth redirect (Checklist #4) 🔽🔽
-            // // If you test OAuth institutions (e.g., app-to-app/web) on desktop:
-            // request.put("redirect_uri", "https://yourapp.example/plaid/oauth-return");
-            // // Make sure the same exact URI is whitelisted in Plaid Dashboard
-            // ===========================================================
-
-            // (Optional) Link UI hint—Link already handles selection, but you can set this
-            // request.put("account_selection", true);
 
             // DEBUG: log the outgoing payload so you can confirm customization + filters
             try {
@@ -228,9 +202,6 @@ public class PlaidController {
         }
     }
 
-    // =========================
-    // INCREMENTAL SYNC (CURSOR)
-    // =========================
     @PostMapping("/transactions/sync")
     public ResponseEntity<?> syncTransactions(@RequestBody Map<String, String> body) {
         String accessToken = body.get("access_token");
@@ -251,7 +222,8 @@ public class PlaidController {
                 req.put("client_id", clientId);
                 req.put("secret", secret);
                 req.put("access_token", accessToken);
-                if (cursor != null) req.put("cursor", cursor);
+                if (cursor != null)
+                    req.put("cursor", cursor);
 
                 String url = plaidBaseUrl + "/transactions/sync";
                 ResponseEntity<String> response = restTemplate.postForEntity(url, req, String.class);
@@ -284,7 +256,7 @@ public class PlaidController {
                 }
 
                 hasMore = root.path("has_more").asBoolean();
-                cursor = root.path("next_cursor").asText();
+                cursor = root.path("next_cursor").asText(null);
 
                 com.budgetcaddie.model.PlaidCursor pc = cursorRepository.findByAccessToken(accessToken)
                         .orElse(new com.budgetcaddie.model.PlaidCursor());
@@ -304,5 +276,4 @@ public class PlaidController {
     public java.util.List<Transaction> getAllStoredTransactions() {
         return transactionRepository.findAll();
     }
-
 }
