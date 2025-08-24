@@ -30,6 +30,18 @@ jobs:
             mvn -DskipTests package
           fi
 
+      # 👇 add this new step
+      - name: Test SSH to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          port: ${{ secrets.EC2_SSH_PORT }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "SSH OK on $(hostname)"
+            uname -a
+
       - name: Copy JAR to EC2 (via SCP)
         uses: appleboy/scp-action@v0.1.7
         with:
