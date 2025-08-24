@@ -52,66 +52,54 @@ public class PlaidController {
     // LINK TOKEN CREATION
     // =========================
     @GetMapping("/create_link_token")
-public ResponseEntity<?> createLinkToken() {
-    try {
-        String uniqueUserId = java.util.UUID.randomUUID().toString();
-
-        Map<String, Object> user = new HashMap<>();
-        user.put("client_user_id", uniqueUserId);
-
-        Map<String, Object> request = new HashMap<>();
-        request.put("client_id", clientId);
-        request.put("secret", secret);
-        request.put("client_name", "BudgetCaddie");
-        request.put("language", "en");
-        request.put("country_codes", new String[] { "US", "CA" });
-        request.put("user", user);
-
-        // Only need transactions
-        request.put("products", new String[] { "transactions" });
-
-        // Ask Plaid for as much history as allowed (up to ~24 months)
-        Map<String, Object> transactionsConfig = new HashMap<>();
-        transactionsConfig.put("days_requested", 730);
-        request.put("transactions", transactionsConfig);
-
-        // 👉 Apply your Link customization (must exist in Plaid Dashboard > Link > Customizations)
-        //    Make sure this name matches exactly what you created (e.g., "canada")
-        request.put("link_customization_name", "canada");
-
-        // 👉 Restrict visible accounts in Link to only chequing, savings, and credit cards
-        Map<String, Object> accountFilters = new HashMap<>();
-
-        Map<String, Object> depository = new HashMap<>();
-        depository.put("account_subtypes", new String[] { "checking", "savings" });
-
-        Map<String, Object> credit = new HashMap<>();
-        credit.put("account_subtypes", new String[] { "credit card" });
-
-        accountFilters.put("depository", depository);
-        accountFilters.put("credit", credit);
-
-        request.put("account_filters", accountFilters);
-
-        // Debug log to confirm what you’re sending
+    public ResponseEntity<?> createLinkToken() {
         try {
-            System.out.println("📝 /link/token/create payload => " + objectMapper.writeValueAsString(request));
-        } catch (Exception ignore) {}
+            // ⚠️ Checklist: Use a FRESH link_token after any Dashboard change
+            // This code already generates a new token per request (no caching).
+            String uniqueUserId = java.util.UUID.randomUUID().toString();
 
-        String url = plaidBaseUrl + "/link/token/create";
-        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            Map<String, Object> user = new HashMap<>();
+            user.put("client_user_id", uniqueUserId);
 
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            JsonNode json = objectMapper.readTree(response.getBody());
-            return ResponseEntity.ok(json);
-        } else {
-            return ResponseEntity.badRequest().body("Failed to create link token");
+            Map<String, Object> request = new HashMap<>();
+            request.put("client_id", clientId);
+            request.put("secret", secret);
+            request.put("client_name", "BudgetCaddie");
+            request.put("language", "en");
+            request.put("country_codes", new String[] { "US", "CA" });
+            request.put("user", user);
+
+            // 💡 Transactions covers depository + credit (credit cards). Keep only "transactions" here.
+            request.put("products", new String[] { "transactions" });
+
+            // ✅ Ensure your intended customization is applied to THIS token
+            // (You said "canada" has Multiple Account Selection enabled.)
+            // request.put("link_customization_name", "canada");
+
+            // Ask for max history Plaid will allow (up to ~24 months depending on FI)
+            Map<String, Object> transactionsConfig = new HashMap<>();
+            transactionsConfig.put("days_requested", 730);
+            request.put("transactions", transactionsConfig);
+
+            // DEBUG: log the outgoing payload so you can confirm customization + filters
+            try {
+                System.out.println("📝 /link/token/create payload => " + objectMapper.writeValueAsString(request));
+            } catch (Exception ignore) {}
+
+            String url = plaidBaseUrl + "/link/token/create";
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode json = objectMapper.readTree(response.getBody());
+                return ResponseEntity.ok(json);
+            } else {
+                return ResponseEntity.badRequest().body("Failed to create link token");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
         }
-    } catch (Exception e) {
-        e.printStackTrace();
-        return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
     }
-}
 
     // =========================
     // PUBLIC TOKEN EXCHANGE
