@@ -1,3 +1,9 @@
+/*  TEMPORARILY DISABLED TO BOOT APP WITHOUT USER REPOSITORY
+package com.budgetcaddie.controller;
+
+// entire contents commented out
+*/
+
 package com.budgetcaddie.controller;
 
 import com.budgetcaddie.model.User;
@@ -101,3 +107,4 @@ public class AuthController {
         return ResponseEntity.ok(savedUser);
     }
 }
+/* END TEMP DISABLE */
