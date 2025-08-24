@@ -30,8 +30,20 @@ jobs:
             mvn -DskipTests package
           fi
 
-      # 👇 add this new step
+      # (optional) quick SSH sanity check
       - name: Test SSH to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}   # usually 'ubuntu'
+          port: ${{ secrets.EC2_SSH_PORT }}   # usually '22'
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "SSH OK on $(hostname)"
+            uname -a
+
+      # make sure upload dir exists before copying
+      - name: Ensure upload dir exists on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -39,9 +51,9 @@ jobs:
           port: ${{ secrets.EC2_SSH_PORT }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "SSH OK on $(hostname)"
-            uname -a
+            mkdir -p /home/ubuntu/upload
 
+      # copy the built jar to the exact filename your deploy.sh expects
       - name: Copy JAR to EC2 (via SCP)
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -49,11 +61,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           port: ${{ secrets.EC2_SSH_PORT }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "target/*.jar"
-          target: "/home/ubuntu/upload/"
-          strip_components: 1
+          source: "target/budgetcaddie-0.0.1-SNAPSHOT.jar"
+          target: "/home/ubuntu/upload/budgetcaddie.jar"
           overwrite: true
 
+      # restart the app on the server
       - name: Deploy on EC2 (restart app)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -62,6 +74,4 @@ jobs:
           port: ${{ secrets.EC2_SSH_PORT }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
-            mv -f /home/ubuntu/upload/*.jar /home/ubuntu/upload/budgetcaddie.jar
             bash /home/ubuntu/deploy.sh
