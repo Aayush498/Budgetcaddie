@@ -29,31 +29,19 @@ jobs:
             sudo apt-get install -y maven
             mvn -DskipTests package
           fi
+          echo "Built artifacts:" && ls -lh target || true
 
-      # (optional) quick SSH sanity check
-      - name: Test SSH to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}   # usually 'ubuntu'
-          port: ${{ secrets.EC2_SSH_PORT }}   # usually '22'
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "SSH OK on $(hostname)"
-            uname -a
-
-      # make sure upload dir exists before copying
+      # Ensure upload dir exists before copy
       - name: Ensure upload dir exists on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          port: ${{ secrets.EC2_SSH_PORT }}
+          username: ${{ secrets.EC2_USER }}      # usually 'ubuntu'
+          port: ${{ secrets.EC2_SSH_PORT }}      # usually 22
           key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            mkdir -p /home/ubuntu/upload
+          script: mkdir -p /home/ubuntu/upload
 
-      # copy the built jar to the exact filename your deploy.sh expects
+      # Copy any jar we built to the server (to the folder)
       - name: Copy JAR to EC2 (via SCP)
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -61,11 +49,33 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           port: ${{ secrets.EC2_SSH_PORT }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "target/budgetcaddie-0.0.1-SNAPSHOT.jar"
-          target: "/home/ubuntu/upload/budgetcaddie.jar"
+          source: "target/*.jar"
+          target: "/home/ubuntu/upload/"
           overwrite: true
 
-      # restart the app on the server
+      # Rename the uploaded jar to the exact name deploy.sh expects
+      - name: Rename uploaded JAR on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          port: ${{ secrets.EC2_SSH_PORT }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            shopt -s nullglob
+            FILES=(/home/ubuntu/upload/*.jar)
+            if [ ${#FILES[@]} -eq 0 ]; then
+              echo "No JARs found in /home/ubuntu/upload after SCP." >&2
+              exit 1
+            fi
+            # pick the newest jar
+            LATEST=$(ls -1t /home/ubuntu/upload/*.jar | head -n 1)
+            echo "Latest uploaded JAR is: $LATEST"
+            mv -f "$LATEST" /home/ubuntu/upload/budgetcaddie.jar
+            ls -lh /home/ubuntu/upload
+
+      # Kick the deploy script
       - name: Deploy on EC2 (restart app)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -75,3 +85,5 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             bash /home/ubuntu/deploy.sh
+            echo "---- app.out (tail) ----"
+            tail -n 80 /home/ubuntu/Budgetcaddie/app.out || true
