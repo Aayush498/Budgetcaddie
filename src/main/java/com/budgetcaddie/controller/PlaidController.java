@@ -78,7 +78,7 @@ public class PlaidController {
 
             // Ask for max history Plaid will allow (up to ~24 months depending on FI)
             Map<String, Object> transactionsConfig = new HashMap<>();
-            transactionsConfig.put("days_requested", 730);
+            transactionsConfig.put("days_requested", 180);
             request.put("transactions", transactionsConfig);
 
             // DEBUG: log the outgoing payload so you can confirm customization + filters
@@ -161,7 +161,7 @@ public class PlaidController {
                 request.put("secret", secret);
                 request.put("access_token", accessToken);
 
-                request.put("start_date", LocalDate.now().minusYears(2).toString());
+                request.put("start_date", LocalDate.now().minusMonths(6).toString());
                 request.put("end_date", LocalDate.now().toString());
 
                 Map<String, Object> options = new HashMap<>();
